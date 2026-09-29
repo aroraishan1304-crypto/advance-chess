@@ -626,8 +626,9 @@
 
             will-change: transform;
 
+            transform: translateZ(0);
             transition:
-                transform 180ms cubic-bezier(.2, .8, .2, 1),
+                transform 180ms cubic-bezier(.22, .61, .36, 1),
                 opacity 120ms ease;
 
         }
@@ -3524,7 +3525,7 @@
                 <div class="home-card-grid">
                     <button class="home-card" data-friend-entry="true" type="button"><span
                             class="home-card-icon">⚔</span>
-                        <h4>Play a Friend</h4>
+                        <span class="home-coming">Live</span><h4>Play a Friend</h4>
                         <p>Challenge another player in a live game.</p>
                     </button>
                     <button class="home-card" data-soon="Tournaments" type="button"><span
@@ -4177,6 +4178,11 @@
 
                 <button id="agreeDraw" class="wide" disabled>
                     Draw by Agreement
+                </button>
+
+
+                <button id="declineDraw" class="wide" hidden>
+                    Decline Draw
                 </button>
 
 
@@ -4855,6 +4861,17 @@
         let friendMode = false;
 
         let friendClockValues = null;
+        let friendOrientationInitialized = false;
+        let friendPendingMove = null;
+        try {
+            Object.defineProperty(window, "friendPendingMove", {
+                configurable: true,
+                get: () => friendPendingMove,
+                set: value => { friendPendingMove = value; }
+            });
+        } catch {
+            window.friendPendingMove = null;
+        }
 
 
         let lowTimeSoundPlayed = {
@@ -5337,7 +5354,8 @@
                 playSound("promote");
                 return;
             }
-            if (move.captured || (typeof move.isEnPassant === "function" && move.isEnPassant())) {
+            const enPassant = typeof move?.isEnPassant === "function" ? move.isEnPassant() : !!move?.isEnPassant;
+            if (move?.captured || enPassant) {
                 playSound("capture");
                 return;
             }
@@ -6205,6 +6223,7 @@
             element.className = "piece " + (piece.color === "w" ? "white-piece" : "black-piece");
             element.dataset.pieceId = id;
             element.dataset.square = square;
+            element.dataset.pieceKind = piece.color + piece.type;
             element.innerHTML = pieceSvgMarkup(piece.color, piece.type);
             element.addEventListener("pointerdown", event => handlePiecePointerDown(event, id));
             element.addEventListener("click", event => {
@@ -6544,6 +6563,10 @@
 
             if (gameOver)
                 return false;
+
+            if (window.friendMode && friendPendingMove) {
+                return false;
+            }
 
             if (puzzleMode) {
                 if (puzzlePhase !== "solving" || game.turn() !== humanColor) return false;
@@ -7139,8 +7162,11 @@
                 element.dataset.square =
                     square;
 
-                element.innerHTML =
-                    pieceSvgMarkup(piece.color, piece.type);
+                const pieceKind = piece.color + piece.type;
+                if (element.dataset.pieceKind !== pieceKind) {
+                    element.innerHTML = pieceSvgMarkup(piece.color, piece.type);
+                    element.dataset.pieceKind = pieceKind;
+                }
 
                 const previewPiece =
                     previewGame
@@ -7345,9 +7371,12 @@
         ) {
 
             if (window.friendMode) {
-                if (isPremove) return;
                 if (move.promotion) {
-                    openPromotion(move, false);
+                    openPromotion(move, isPremove);
+                    return;
+                }
+                if (isPremove) {
+                    queuePremove(move);
                     return;
                 }
                 window.friendSubmitMove?.(move);
@@ -7428,10 +7457,20 @@
                     return;
                 }
 
-                playHumanMove(
-                    legal
-                );
+                if (window.friendMode) {
+                    if (window.friendSubmitMove?.(legal)) {
+                        selectedSquare = null;
+                        selectedMoves = [];
+                        premoveQueue = [];
+                        renderAll();
+                    }
+                } else {
+                    playHumanMove(
+                        legal
+                    );
+                }
                 return;
+
             }
 
             if (
@@ -7532,6 +7571,16 @@
                 return;
             }
 
+            if (window.friendMode) {
+                if (window.friendSubmitMove?.(legal)) {
+                    premoveQueue.shift();
+                    selectedSquare = null;
+                    selectedMoves = [];
+                    renderAll();
+                }
+                return;
+            }
+
             premoveQueue.shift();
 
             playHumanMove(
@@ -7558,7 +7607,14 @@
             const movingColor = game.turn();
 
             try {
-                const playedMove = game.move({ from: move.from, to: move.to, promotion: move.promotion });
+                const playedMove = findMatchingMove(game, move);
+                if (!playedMove) throw new Error("Illegal move");
+                /* Move the persistent DOM piece BEFORE changing the logical
+                 * chess position. Otherwise ensurePieceModel() sees the new
+                 * position too early and rebuilds every piece, killing the
+                 * transform animation. */
+                applyPieceModelMove(playedMove);
+                game.move({ from: playedMove.from, to: playedMove.to, promotion: playedMove.promotion });
                 playMoveSound(playedMove, movingColor);
 
                 if (fromPremove && !activeTimeControl.unlimited) {
@@ -7566,7 +7622,6 @@
                     else blackTime = Math.max(0, blackTime - PREMOVE_TIME_COST);
                 }
 
-                applyPieceModelMove(move);
                 addIncrement(movingColor);
                 lastClockTick = performance.now();
                 recordClockSnapshot();
@@ -7693,6 +7748,13 @@
              * Play it.
              */
 
+            /* Update the persistent piece model while `game` is still on
+             * the pre-move position, then commit the logical move. */
+            applyPieceModelMove(
+                legal
+            );
+
+
             const playedMove =
                 game.move({
 
@@ -7711,11 +7773,6 @@
             playMoveSound(
                 playedMove,
                 movingColor
-            );
-
-
-            applyPieceModelMove(
-                legal
             );
 
 
@@ -7831,7 +7888,7 @@
             if (game.isStalemate()) { finishGame("½-½ · stalemate", "draw", "gameDraw"); return; }
             if (game.isInsufficientMaterial()) { finishGame("½-½ · insufficient material", "draw", "gameDraw"); return; }
             if (halfmoveClock() >= 150) { finishGame("½-½ · automatic 75-move draw", "draw", "gameDraw"); return; }
-            if (typeof game.isFivefoldRepetition === "function" && game.isFivefoldRepetition()) { finishGame("½-½ · automatic fivefold repetition", "draw", "gameDraw"); return; }
+            if (repetitionCount() >= 5) { finishGame("½-½ · automatic fivefold repetition", "draw", "gameDraw"); return; }
 
             renderAll();
             if (game.turn() !== humanColor) requestEngineMove();
@@ -7858,7 +7915,11 @@
                 } else {
                     statusElement.textContent = sideName(turn) + " to move" + (check ? " · CHECK" : "");
                     substatusElement.textContent = turn === humanColor ? "Your turn" : "Opponent's turn";
-                    premoveInfoElement.textContent = fs?.drawOffer ? "Draw offered." : "Live friend game · server authoritative";
+                    if (fs?.drawOffer) {
+                        premoveInfoElement.textContent = fs.drawOffer === window.friendColor ? "Your draw offer is waiting for a response." : "Your opponent offered a draw.";
+                    } else {
+                        premoveInfoElement.textContent = "Live friend game · server authoritative";
+                    }
                 }
                 renderActionButtons();
                 return;
@@ -7886,17 +7947,39 @@
         function renderActionButtons() {
             if (window.friendMode) {
                 $("resign").textContent = "Resign";
-                $("resign").disabled = gameOver || window.friendStateSnapshot?.status === "waiting";
+                const pending = !!friendPendingMove;
+                $("resign").disabled = gameOver || window.friendStateSnapshot?.status === "waiting" || pending;
                 $("undo").disabled = true;
                 const claims = window.friendStateSnapshot?.claimable || {};
-                $("claim3").disabled = gameOver || !claims.threefold;
-                $("claim50").disabled = gameOver || !claims.fifty;
+                $("claim3").disabled = gameOver || pending || !claims.threefold;
+                $("claim50").disabled = gameOver || pending || !claims.fifty;
                 const offer = window.friendStateSnapshot?.drawOffer;
-                $("agreeDraw").disabled = gameOver || window.friendStateSnapshot?.status === "waiting";
-                $("agreeDraw").textContent = offer && offer !== window.friendColor ? "Accept Draw" : "Offer Draw";
+                const waiting = window.friendStateSnapshot?.status === "waiting";
+                const opponentOffer = !!offer && offer !== window.friendColor;
+                const ownOffer = offer === window.friendColor;
+                $("agreeDraw").disabled = gameOver || waiting || pending || ownOffer;
+                $("agreeDraw").textContent = opponentOffer ? "Accept Draw" : "Offer Draw";
+                const declineButton = $("declineDraw");
+                if (declineButton) {
+                    declineButton.hidden = !opponentOffer;
+                    declineButton.disabled = gameOver || waiting || pending || !opponentOffer;
+                }
+                $("clearPremove").disabled = premoveQueue.length === 0 || pending;
+                $("timeControl").disabled = true;
+                $("sideSelect").disabled = true;
+                $("difficulty").disabled = true;
+                $("depthRange").disabled = true;
+                if (window.friendStateSnapshot?.status === "waiting" || friendPendingMove) {
+                    selectedSquare = null;
+                    selectedMoves = [];
+                }
                 return;
             }
 
+            $("timeControl").disabled = false;
+            $("sideSelect").disabled = false;
+            $("difficulty").disabled = false;
+            $("depthRange").disabled = false;
             const moves = game.history().length;
             const claim3 = typeof game.isThreefoldRepetition === "function" && game.isThreefoldRepetition();
             const claim50 = halfmoveClock() >= 100;
@@ -8159,13 +8242,26 @@
         }
 
 
+        function updateFriendLowTimeSounds(values) {
+            const fs = window.friendStateSnapshot || null;
+            if (!fs || !values || !lowTimeWarningEnabled || !soundEnabled || fs.timeUnlimited || gameOver) return;
+            if (fs.turn === "w") {
+                updateLowTimeSound("w", values.w);
+            } else if (fs.turn === "b") {
+                updateLowTimeSound("b", values.b);
+            }
+        }
+
+
         function renderClocks() {
 
             if (window.friendMode && window.friendClockValues) {
-                $("blackClock").textContent = formatTime(window.friendClockValues.b / 1000);
-                $("whiteClock").textContent = formatTime(window.friendClockValues.w / 1000);
-                renderClockState("blackPlayer", window.friendClockValues.b / 1000);
-                renderClockState("whitePlayer", window.friendClockValues.w / 1000);
+                const friendUnlimited = !!window.friendStateSnapshot?.timeUnlimited;
+                $("blackClock").textContent = friendUnlimited ? "∞" : formatTime(window.friendClockValues.b / 1000);
+                $("whiteClock").textContent = friendUnlimited ? "∞" : formatTime(window.friendClockValues.w / 1000);
+                renderClockState("blackPlayer", friendUnlimited ? Infinity : window.friendClockValues.b / 1000);
+                renderClockState("whitePlayer", friendUnlimited ? Infinity : window.friendClockValues.w / 1000);
+                updateFriendLowTimeSounds(window.friendClockValues);
                 $("blackPlayer").classList.toggle("active", !gameOver && game.turn() === "b");
                 $("whitePlayer").classList.toggle("active", !gameOver && game.turn() === "w");
                 $("blackDot").classList.toggle("live", !gameOver && game.turn() === "b");
@@ -8876,6 +8972,12 @@
                 return;
             }
 
+            if (window.friendMode) {
+                window.friendExit?.();
+                friendPendingMove = null;
+                friendOrientationInitialized = false;
+            }
+
             const playStartSound = !!options.playStartSound;
             const deferStart = !!options.deferStart;
 
@@ -8973,6 +9075,14 @@
 
         function claimThreefold() {
             if (gameOver || typeof game.isThreefoldRepetition !== "function") return;
+            if (window.friendMode) {
+                if (!window.friendStateSnapshot?.claimable?.threefold) {
+                    showToast("Threefold repetition is not currently claimable.");
+                    return;
+                }
+                window.friendClaimDraw?.("threefold");
+                return;
+            }
             if (!game.isThreefoldRepetition()) { showToast("Threefold repetition is not currently claimable."); return; }
             finishGame("½-½ · claimed threefold repetition", "draw", "gameDraw");
         }
@@ -8980,18 +9090,42 @@
 
         function claimFifty() {
             if (gameOver || halfmoveClock() < 100) { if (!gameOver) showToast("50-move draw is not currently claimable."); return; }
+            if (window.friendMode) {
+                if (!window.friendStateSnapshot?.claimable?.fifty) {
+                    showToast("50-move draw is not currently claimable.");
+                    return;
+                }
+                window.friendClaimDraw?.("fifty");
+                return;
+            }
             finishGame("½-½ · claimed 50-move draw", "draw", "gameDraw");
         }
 
 
         function agreeDraw() {
-            if (gameOver || game.history().length === 0) return;
+            if (gameOver) return;
+            if (window.friendMode) {
+                const fs = window.friendStateSnapshot || null;
+                if (fs?.status === "waiting") return;
+                if (fs?.drawOffer && fs.drawOffer !== window.friendColor) {
+                    window.friendAcceptDraw?.();
+                } else if (!fs?.drawOffer) {
+                    window.friendOfferDraw?.();
+                }
+                return;
+            }
+            if (game.history().length === 0) return;
             openConfirm("draw", "End the game as a draw?", "Draw by Agreement");
         }
 
 
         function resign() {
             if (gameOver) return;
+            if (window.friendMode) {
+                if (window.friendStateSnapshot?.status !== "active") return;
+                openConfirm("resign", "Are you sure you want to resign?", "Resign");
+                return;
+            }
             if (game.history().length === 0) openConfirm("abort", "Abort this game?", "Abort Game");
             else openConfirm("resign", "Are you sure you want to resign?", "Resign");
         }
@@ -9030,12 +9164,22 @@
 
         function performResign() {
             closeConfirm();
+            if (window.friendMode) {
+                window.friendResign?.();
+                return;
+            }
             const result = humanColor === "w" ? "0-1" : "1-0";
             finishGame(result + " · resignation", "loss", "gameLose");
         }
 
         function performDrawAgreement() {
             closeConfirm();
+            if (window.friendMode) {
+                const fs = window.friendStateSnapshot || null;
+                if (fs?.drawOffer && fs.drawOffer !== window.friendColor) window.friendAcceptDraw?.();
+                else if (!fs?.drawOffer) window.friendOfferDraw?.();
+                return;
+            }
             finishGame("½-½ · draw by agreement", "draw", "gameDraw");
         }
 
@@ -9924,9 +10068,9 @@
                 const movingColor = game.turn();
                 const legal = game.moves({ verbose: true }).find(m => moveToUci(m) === expected);
                 if (!legal) throw new Error(`Opponent puzzle move is illegal: ${expected}`);
+                applyPieceModelMove(legal);
                 const played = game.move({ from: legal.from, to: legal.to, promotion: legal.promotion });
                 playMoveSound(played, movingColor);
-                applyPieceModelMove(played);
                 puzzleSolutionIndex += 1;
                 selectedSquare = null;
                 selectedMoves = [];
@@ -9957,9 +10101,9 @@
             try {
                 const legal = game.moves({ verbose: true }).find(m => moveToUci(m) === moveToUci(normalizedMove));
                 if (!legal) throw new Error("Illegal puzzle move");
+                applyPieceModelMove(legal);
                 const played = game.move({ from: legal.from, to: legal.to, promotion: legal.promotion });
                 playMoveSound(played, humanColor);
-                applyPieceModelMove(played);
                 selectedSquare = null;
                 selectedMoves = [];
 
@@ -10104,9 +10248,9 @@
                         const legal = game.moves({ verbose: true }).find(m => moveToUci(m) === uci);
                         if (!legal) throw new Error(`Illegal solution move: ${uci}`);
                         const movingColor = game.turn();
+                        applyPieceModelMove(legal);
                         const played = game.move({ from: legal.from, to: legal.to, promotion: legal.promotion });
                         playMoveSound(played, movingColor);
-                        applyPieceModelMove(played);
                         puzzleSolutionIndex += 1;
 
                         if (puzzleSubstatusElement) {
@@ -10349,6 +10493,11 @@
         }
 
         function showHomeView(options = {}) {
+            if (window.friendMode && options.keepFriend !== true) {
+                window.friendExit?.();
+                friendPendingMove = null;
+                friendOrientationInitialized = false;
+            }
             if (puzzleMode) pausePuzzleForHome();
             else if (options.pause !== false) pauseGameForHome();
             return transitionViews(() => {
@@ -10651,6 +10800,15 @@
                 "click",
                 agreeDraw
             );
+
+
+        $("declineDraw")?.addEventListener("click", () => {
+            if (!window.friendMode || gameOver) return;
+            const fs = window.friendStateSnapshot || null;
+            if (fs?.drawOffer && fs.drawOffer !== window.friendColor) {
+                window.friendDeclineDraw?.();
+            }
+        });
 
 
         $("resign")
@@ -11003,55 +11161,181 @@
         window.closeResultModal = closeResultModal;
         window.openResultModal = openResultModal;
         window.playFriendMoveSound = (move, moverColor) => playMoveSound(move, moverColor);
-        window.updateFriendClockElements = (values) => { friendClockValues = values; renderClocks(); };
+        window.updateFriendClockElements = (values) => { friendClockValues = values; window.friendClockValues = values; renderClocks(); };
+        window.playFriendResultSound = (outcome) => playResultSound(outcome);
+        window.friendExecutePremove = executeNextPremove;
 
+        window.friendOptimisticMove = (move) => {
+            if (!window.friendMode || !game || gameOver || friendPendingMove) return false;
+            if (game.turn() !== humanColor) return false;
+            const legal = findMatchingMove(game, move);
+            if (!legal) return false;
+            try {
+                applyPieceModelMove(legal);
+                const played = game.move({ from: legal.from, to: legal.to, promotion: legal.promotion || undefined });
+                friendPendingMove = { from: played.from, to: played.to, promotion: played.promotion || null };
+                selectedSquare = null;
+                selectedMoves = [];
+                playMoveSound(played, humanColor);
+                renderAll();
+                return true;
+            } catch (error) {
+                console.error("Friend optimistic move error:", error);
+                resetPieceModel();
+                return false;
+            }
+        };
+
+
+        function reconstructFriendChess(snapshot) {
+            const rebuilt = new Chess();
+            for (const move of (snapshot?.moves || [])) {
+                rebuilt.move({ from: move.from, to: move.to, promotion: move.promotion || undefined });
+            }
+            return rebuilt;
+        }
+
+        function verboseFriendMove(previousSnapshot, snapshot) {
+            if (!previousSnapshot || !snapshot) return null;
+            if (snapshot.seq !== previousSnapshot.seq + 1) return null;
+            const previousMoves = previousSnapshot.moves || [];
+            const nextMoves = snapshot.moves || [];
+            if (nextMoves.length !== previousMoves.length + 1) return null;
+            const last = nextMoves[nextMoves.length - 1];
+            if (!last?.from || !last?.to) return null;
+            try {
+                const before = reconstructFriendChess(previousSnapshot);
+                return before.move({ from: last.from, to: last.to, promotion: last.promotion || undefined });
+            } catch {
+                return null;
+            }
+        }
 
         window.friendApplyState = (snapshot, color) => {
             if (!Chess) {
                 window._pendingFriendState = { snapshot, color };
                 return;
             }
+
+            const previousSnapshot = window.friendStateSnapshot || null;
+            const wasGameOver = gameOver;
+            const wasActive = previousSnapshot?.status === "active";
+            const hadPremoves = premoveQueue.length > 0;
+            const previousMoveCount = previousSnapshot?.moves?.length || 0;
+            const lastMove = snapshot?.moves?.[snapshot.moves.length - 1] || null;
+            const acknowledgesOwnMove = !!friendPendingMove && !!lastMove &&
+                snapshot?.seq === (previousSnapshot?.seq ?? -1) + 1 &&
+                snapshot?.moves?.length === previousMoveCount + 1 &&
+                lastMove.from === friendPendingMove.from &&
+                lastMove.to === friendPendingMove.to &&
+                (lastMove.promotion || null) === (friendPendingMove.promotion || null);
+            const incomingMove = verboseFriendMove(previousSnapshot, snapshot);
+
             window.friendMode = true;
-            window.friendColor = color;
+            window.friendColor = color || window.friendColor || humanColor;
             window.friendStateSnapshot = snapshot;
             friendMode = true;
-            humanColor = color || "w";
-            flipped = humanColor === "b";
+            humanColor = color || window.friendColor || "w";
+
+            if (!friendOrientationInitialized) {
+                flipped = humanColor === "b";
+                friendOrientationInitialized = true;
+            }
 
             try {
-                const rebuilt = new Chess();
-                for (const move of (snapshot?.moves || [])) {
-                    rebuilt.move({ from: move.from, to: move.to, promotion: move.promotion || undefined });
+                if (acknowledgesOwnMove) {
+                    friendPendingMove = null;
+                } else if (incomingMove && game) {
+                    /* Apply a remote move to the persistent piece model BEFORE
+                     * replacing the logical chess position. This preserves the
+                     * CSS transform transition instead of rebuilding the board. */
+                    applyPieceModelMove(incomingMove);
                 }
-                game = rebuilt;
+
+                game = reconstructFriendChess(snapshot);
+
+                if (!acknowledgesOwnMove && !incomingMove && snapshot?.moves?.length !== previousMoveCount) {
+                    resetPieceModel();
+                    friendPendingMove = null;
+                }
+
+                if (!acknowledgesOwnMove && friendPendingMove) {
+                    /* A rejection/reconnect supplied an authoritative position
+                     * that does not contain our pending move. Snap back cleanly. */
+                    const currentLast = snapshot?.moves?.[snapshot.moves.length - 1] || null;
+                    const stillPending = !!currentLast && currentLast.from === friendPendingMove.from &&
+                        currentLast.to === friendPendingMove.to &&
+                        (currentLast.promotion || null) === (friendPendingMove.promotion || null);
+                    if (!stillPending) {
+                        friendPendingMove = null;
+                        resetPieceModel();
+                    }
+                }
             } catch (e) {
                 console.error("Friend game state error", e);
-                return;
+                game = reconstructFriendChess(snapshot);
+                friendPendingMove = null;
+                resetPieceModel();
             }
 
             if (snapshot?.white?.name) {
-                const el = $("whitePlayer")?.querySelector("strong");
-                if (el) el.textContent = snapshot.white.name;
+                const playerEl = $("whitePlayer")?.querySelector("strong");
+                if (playerEl) playerEl.textContent = snapshot.white.name;
             }
             if (snapshot?.black?.name) {
-                const el = $("blackPlayer")?.querySelector("strong");
-                if (el) el.textContent = snapshot.black.name;
+                const playerEl = $("blackPlayer")?.querySelector("strong");
+                if (playerEl) playerEl.textContent = snapshot.black.name;
             }
+
             const breadcrumb = document.querySelector(".game-breadcrumb");
             if (breadcrumb) breadcrumb.textContent = "Play / Friend";
 
-            const wasGameOver = gameOver;
             gameOver = snapshot?.status === "finished";
+            const winningColor = snapshot?.result === "white" ? "w" : snapshot?.result === "black" ? "b" : null;
+            const opponentName = winningColor === "w" ? (snapshot?.black?.name || "Your opponent") : (snapshot?.white?.name || "Your opponent");
             resultText = gameOver
-                ? (snapshot.result === "draw" ? "½-½ · " + (snapshot.reason || "draw") : ((snapshot.result === "white" ? "1-0" : "0-1") + " · " + (snapshot.reason || "finished")))
+                ? (snapshot.result === "draw"
+                    ? "½-½ · " + (snapshot.reason || "draw")
+                    : ((snapshot.result === "white" ? "1-0" : "0-1") + " · " + (snapshot.reason || "finished")))
                 : "";
-            resultOutcome = gameOver ? (snapshot.result === "draw" ? "draw" : snapshot.result === humanColor ? "win" : "loss") : null;
+            resultOutcome = gameOver
+                ? (snapshot.result === "draw" ? "draw" : winningColor === humanColor ? "win" : "loss")
+                : null;
+
             selectedSquare = null;
             selectedMoves = [];
-            premoveQueue = [];
             promotionState = null;
             promotionElement.classList.remove("show");
             friendClockValues = snapshot?.clocks ? { w: snapshot.clocks.white, b: snapshot.clocks.black } : null;
+            window.friendClockValues = friendClockValues;
+            if (snapshot) {
+                const friendTimeValue = snapshot.timeUnlimited
+                    ? "0+0"
+                    : `${Math.round((snapshot.initialMs || 0) / 1000)}+${Math.round((snapshot.incrementMs || 0) / 1000)}`;
+                const timeControlElement = $("timeControl");
+                if (timeControlElement && [...timeControlElement.options].some(option => option.value === friendTimeValue)) {
+                    timeControlElement.value = friendTimeValue;
+                }
+            }
+
+            if (gameOver) {
+                premoveQueue = [];
+                friendPendingMove = null;
+                if (!wasGameOver) {
+                    window.playFriendResultSound?.(resultOutcome);
+                    if (snapshot.reason === "resignation") {
+                        showToast(winningColor === humanColor ? `${opponentName} resigned. You win.` : `You resigned. ${opponentName} wins.`);
+                    } else if (snapshot.reason === "agreement" || snapshot.reason === "threefold_claim" || snapshot.reason === "fifty_move_claim") {
+                        showToast("Draw agreed/claimed. Game over.");
+                    } else if (snapshot.reason === "timeout_insufficient_material") {
+                        showToast("Time expired, but the position is insufficient for checkmate. Draw.");
+                    } else if (snapshot.reason === "timeout") {
+                        showToast(winningColor === humanColor ? "Your opponent ran out of time. You win." : "Your time expired. You lose.");
+                    } else if (snapshot.reason === "checkmate") {
+                        showToast(winningColor === humanColor ? "Checkmate — you win." : "Checkmate — you lose.");
+                    }
+                }
+            }
 
             if (!document.querySelector("#gameView")?.classList.contains("show")) {
                 showGameView().then(() => renderAll());
@@ -11060,7 +11344,22 @@
             }
 
             window.updateFriendClockElements?.(friendClockValues);
-            if (gameOver && !wasGameOver) window.setTimeout(() => window.openResultModal?.(), 220);
+
+            if (gameOver && !wasGameOver) {
+                window.setTimeout(() => window.openResultModal?.(), 220);
+            }
+
+            const opponentJustMoved =
+                wasActive &&
+                previousSnapshot?.turn !== humanColor &&
+                snapshot?.status === "active" &&
+                snapshot.turn === humanColor &&
+                hadPremoves &&
+                !friendPendingMove;
+
+            if (opponentJustMoved) {
+                window.friendExecutePremove?.();
+            }
         };
 
         /* ============================================================
