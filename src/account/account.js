@@ -39,6 +39,9 @@ const ok = (data = {}, status = 200, headers = {}) => json(data, status, headers
 
 export async function handleAccountRequest(request, env, ctx = {}) {
   const url = new URL(request.url);
+  if (url.pathname === "/chess.html") {
+    return decorateChessPage(request, env);
+  }
   if (!url.pathname.startsWith("/api/account") && !url.pathname.startsWith("/account")) return null;
   if (url.pathname.startsWith("/account") && !url.pathname.startsWith("/api/account")) return env.ASSETS?.fetch(request) || new Response("Account UI unavailable", { status: 503 });
   try {
@@ -242,6 +245,21 @@ async function issueSession(env, userId, request, extraCookies = []) {
   return { csrfToken: csrf, cookies };
 }
 
+async function decorateChessPage(request, env) {
+  if (!env.ASSETS) return new Response("Chess assets unavailable", { status: 503 });
+  if (request.method !== "GET") return env.ASSETS.fetch(request);
+  const upstream = await env.ASSETS.fetch(request);
+  if (!upstream.ok) return upstream;
+  const html = await upstream.text();
+  const tag = '<script type="module" src="/account/bridge.js"></script>';
+  if (html.includes('/account/bridge.js')) return new Response(html, { status: upstream.status, statusText: upstream.statusText, headers: upstream.headers });
+  const body = html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : `${html}${tag}`;
+  const headers = new Headers(upstream.headers);
+  headers.delete('content-length');
+  headers.delete('etag');
+  return new Response(body, { status: upstream.status, statusText: upstream.statusText, headers });
+}
+
 function responseWithCookies(data, cookies, status = 200) {
   const headers = new Headers({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   cookies.forEach(c => headers.append("Set-Cookie", c));
@@ -392,18 +410,45 @@ async function logout(request, env) {
 async function createGuest(request, env) {
   const cookies = parseCookies(request.headers.get("Cookie"));
   if (cookies[GUEST_COOKIE]) {
-    const existing = await env.ACCOUNTS.prepare("SELECT id FROM guest_accounts WHERE token_hash=? AND last_seen_at>? ")
+    const existing = await env.ACCOUNTS.prepare("SELECT * FROM guest_accounts WHERE token_hash=? AND last_seen_at>? ")
       .bind(await sha256Hex(cookies[GUEST_COOKIE]), Date.now() - 90 * 86400000).first();
     if (existing) {
-      await env.ACCOUNTS.prepare("UPDATE guest_accounts SET last_seen_at=? WHERE id=?").bind(Date.now(), existing.id).run();
-      return responseWithCookies({ ok: true, guest: { id: existing.id, label: "Guest" }, csrfToken: null, existing: true }, [makeCookie(GUEST_COOKIE, cookies[GUEST_COOKIE], { maxAge: 90 * 86400 })]);
+      let data = {};
+      try { data = JSON.parse(existing.data_json || "{}"); } catch {}
+      let username = String(data.username || "");
+      if (!username) {
+        username = await uniqueGuestUsername(env);
+        data.username = username;
+        data.displayName = username;
+        await env.ACCOUNTS.prepare("UPDATE guest_accounts SET data_json=?,last_seen_at=? WHERE id=?")
+          .bind(JSON.stringify(data), Date.now(), existing.id).run();
+      } else {
+        await env.ACCOUNTS.prepare("UPDATE guest_accounts SET last_seen_at=? WHERE id=?").bind(Date.now(), existing.id).run();
+      }
+      return responseWithCookies({ ok: true, guest: { id: existing.id, username, label: username, avatarUrl: "/account/default-avatar.svg" }, csrfToken: null, existing: true }, [makeCookie(GUEST_COOKIE, cookies[GUEST_COOKIE], { maxAge: 90 * 86400 })]);
     }
   }
   const token = randomToken(24);
   const now = Date.now();
   const id = randomId();
-  await env.ACCOUNTS.prepare("INSERT INTO guest_accounts(id,token_hash,created_at,last_seen_at,data_json) VALUES(?,?,?,?,?)").bind(id, await sha256Hex(token), now, now, JSON.stringify({ ratings: {}, puzzles: {}, games: [] })).run();
-  return responseWithCookies({ ok: true, guest: { id, label: "Guest" }, csrfToken: null, existing: false }, [makeCookie(GUEST_COOKIE, token, { maxAge: 90 * 86400 })]);
+  const username = await uniqueGuestUsername(env);
+  const data = { username, displayName: username, ratings: {}, puzzles: {}, games: [] };
+  await env.ACCOUNTS.prepare("INSERT INTO guest_accounts(id,token_hash,created_at,last_seen_at,data_json) VALUES(?,?,?,?,?)").bind(id, await sha256Hex(token), now, now, JSON.stringify(data)).run();
+  return responseWithCookies({ ok: true, guest: { id, username, label: username, avatarUrl: "/account/default-avatar.svg" }, csrfToken: null, existing: false }, [makeCookie(GUEST_COOKIE, token, { maxAge: 90 * 86400 })]);
+}
+
+const GUEST_NAME_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+async function uniqueGuestUsername(env) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const bytes = new Uint8Array(6);
+    crypto.getRandomValues(bytes);
+    let suffix = "";
+    for (const b of bytes) suffix += GUEST_NAME_ALPHABET[b % GUEST_NAME_ALPHABET.length];
+    const username = `Guest_${suffix}`;
+    const row = await env.ACCOUNTS.prepare("SELECT 1 FROM guest_accounts WHERE data_json LIKE ? LIMIT 1").bind(`%\"username\":\"${username}\"%`).first();
+    if (!row) return username;
+  }
+  return `Guest_${randomToken(6).replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
 }
 
 async function migrateGuest(request, env) {
@@ -514,14 +559,21 @@ async function currentGuest(request, env) {
   if (!row) return null;
   await env.ACCOUNTS.prepare("UPDATE guest_accounts SET last_seen_at=? WHERE id=?").bind(Date.now(), row.id).run();
   let data={}; try { data=JSON.parse(row.data_json||"{}"); } catch {}
-  return {id:row.id,label:"Guest",data};
+  let username = String(data.username || "");
+  if (!username) {
+    username = await uniqueGuestUsername(env);
+    data.username = username;
+    data.displayName = username;
+    await env.ACCOUNTS.prepare("UPDATE guest_accounts SET data_json=? WHERE id=?").bind(JSON.stringify(data), row.id).run();
+  }
+  return {id:row.id,username,label:username,data};
 }
 
 async function me(request, env) {
   const session = await currentSession(request, env);
   if (!session) {
     const guest = await currentGuest(request, env);
-    return guest ? ok({ authenticated:false, guest:true, guestProfile:{id:guest.id,label:guest.label, data:guest.data} }) : ok({ authenticated: false });
+    return guest ? ok({ authenticated:false, guest:true, guestProfile:{id:guest.id,username:guest.username,label:guest.label,avatarUrl:"/account/default-avatar.svg", data:guest.data} }) : ok({ authenticated: false });
   }
   const user = publicUser(session, true);
   const settings = await settingsForUser(env, session.user_id);
