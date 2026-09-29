@@ -181,30 +181,58 @@ function renderSide() {
 function renderGuest() {
   showGuest();
   const root = $("#guestContent");
-  root.replaceChildren(
-    pageHead("Guest mode", "Try Advanced Chess without creating an account. Your guest progress can be transferred when you register."),
-    h("section", { class: "card guest-hero" }, [
-      h("div", { class: "guest-icon", text: "♞" }),
-      h("div", {}, [
-        h("h2", { text: "You are playing as a guest" }),
-        h("p", { text: "Guest activity is kept on this browser. Create a free account later and we will import the guest progress that the game has recorded." }),
-        h("div", { class: "chips" }, [
-          h("a", { class: "primary-btn", href: "#create-account", text: "Create account" }),
-          h("a", { class: "secondary-btn", href: "/chess.html", text: "Return to chess" }),
-        ])
-      ])
-    ]),
-    h("section", { class: "grid grid-3" }, [
-      h("div", { class: "card metric-card" }, [h("div", { class: "metric", text: "No email" }), h("div", { class: "metric-label", text: "No signup required" })]),
-      h("div", { class: "card metric-card" }, [h("div", { class: "metric", text: "Local" }), h("div", { class: "metric-label", text: "Guest identity" })]),
-      h("div", { class: "card metric-card" }, [h("div", { class: "metric", text: "Transferable" }), h("div", { class: "metric-label", text: "Create an account to save progress" })])
-    ])
-  );
-  $$('a[href="#create-account"]', root).forEach(a => a.addEventListener("click", e => {
-    e.preventDefault();
-    showAuth();
-    setAuthMode("signup");
-  }));
+  const data = state.guest?.data || {};
+  const username = state.guest?.username || state.guest?.label || "Guest";
+  const games = Array.isArray(data.games) ? data.games : [];
+  const ratings = data.ratings || {};
+  const puzzle = data.puzzles || {};
+  const raw = location.hash.replace(/^#/, '').split('?')[0] || 'profile';
+  const route = ['profile','games','stats','settings'].includes(raw) ? raw : 'profile';
+
+  const nav = h('div', { class:'guest-tabs' });
+  for (const [key,label] of [['profile','Profile'],['games','Game history'],['stats','Stats'],['settings','Settings']]) {
+    const a = h('a', { class:`guest-tab ${route===key?'active':''}`, href:`#${key}`, text:label });
+    nav.append(a);
+  }
+
+  const hero = h('section', { class:'card guest-hero' });
+  const avatar = h('img', { class:'guest-big-avatar', src:'/account/default-avatar.svg', alt:`${username} avatar` });
+  const info = h('div');
+  info.append(h('div',{class:'eyebrow',text:'GUEST PLAYER'}), h('h2',{text:username}), h('p',{class:'muted',text:'This guest identity is already active. You can keep playing immediately without filling out a name form.'}));
+  const actions = h('div',{class:'chips'},[
+    h('a',{class:'primary-btn',href:'#create-account',text:'Create account'}),
+    h('a',{class:'secondary-btn',href:'/chess.html',text:'Play chess'}),
+    h('a',{class:'secondary-btn',href:'#sign-in',text:'Sign in'})
+  ]);
+  info.append(actions);
+  hero.append(avatar,info);
+
+  root.replaceChildren(pageHead('Your chess identity', 'Guest mode is ready. Your guest username stays attached to this browser session.'), nav, hero);
+
+  if(route === 'profile') {
+    root.append(h('section',{class:'grid grid-3'},[
+      h('div',{class:'card metric-card'},[h('div',{class:'metric',text:String(games.length)}),h('div',{class:'metric-label',text:'Games recorded'})]),
+      h('div',{class:'card metric-card'},[h('div',{class:'metric',text:String(puzzle.solves||0)}),h('div',{class:'metric-label',text:'Puzzles solved'})]),
+      h('div',{class:'card metric-card'},[h('div',{class:'metric',text:'Guest'}),h('div',{class:'metric-label',text:'Account status'})])
+    ]));
+  } else if(route === 'games') {
+    const card=h('section',{class:'card'});
+    card.append(h('div',{class:'card-head'},[h('h3',{text:'Game history'}),h('span',{class:'muted',text:`${games.length} recorded`})]));
+    const list=h('div',{class:'list'});
+    games.slice(0,50).forEach(g=>list.append(h('div',{class:'list-row'},[h('div',{},[h('strong',{text:g.result||'Game'}),h('small',{text:g.timeControl||'Chess game'})]),h('time',{text:safeDateTime(g.endedAt||g.createdAt)})])));
+    if(!games.length)list.append(h('div',{class:'empty',text:'No guest games have been recorded yet.'}));
+    card.append(list);root.append(card);
+  } else if(route === 'stats') {
+    const card=h('section',{class:'card'});card.append(h('div',{class:'card-head'},[h('h3',{text:'Guest statistics'})]));
+    const grid=h('div',{class:'rating-grid'});
+    for(const key of ['bullet','blitz','rapid','classical']) { const r=ratings[key]||{}; grid.append(h('div',{class:'rating-card'},[h('div',{class:'label',text:key}),h('strong',{text:formatRating(r.rating??1200)}),h('span',{class:'rating-status',text:`${Number(r.games||0)} games`})])); }
+    card.append(grid,h('p',{class:'muted',text:`Puzzle rating ${formatRating(puzzle.rating??1200)} · ${Number(puzzle.games||0)} attempts · ${Number(puzzle.solves||0)} solved`}));root.append(card);
+  } else {
+    const card=h('section',{class:'card'});card.append(h('div',{class:'card-head'},[h('h3',{text:'Guest settings'})]),h('p',{class:'muted',text:'Guest preferences use the chess page settings. A registered account can sync preferences across devices.'}),h('div',{class:'chips'},[h('a',{class:'secondary-btn',href:'/chess.html',text:'Open chess settings'})]));root.append(card);
+  }
+
+  $$('a[href="#create-account"]', root).forEach(a => a.addEventListener('click', e => { e.preventDefault(); location.hash='#create-account'; showAuth(); setAuthMode('signup'); }));
+  $$('a[href="#sign-in"]', root).forEach(a => a.addEventListener('click', e => { e.preventDefault(); location.hash=''; showAuth(); setAuthMode('login'); }));
 }
 
 function renderProfile() {
@@ -719,7 +747,21 @@ function mountHeader(){
   $$('[data-auth-tab]').forEach(button=>button.addEventListener('click',()=>setAuthMode(button.dataset.authTab)));
   $$('[data-toggle-password]').forEach(button=>button.addEventListener('click',()=>{const input=document.getElementById(button.dataset.togglePassword);input.type=input.type==='password'?'text':'password';button.textContent=input.type==='password'?'Show':'Hide';}));
   $("#googleLogin").onclick=()=>googleStart("login");$("#googleSignup").onclick=()=>googleStart("signup");
-  $("#guestLogin").onclick=async()=>{try{await api("/guest",{method:"POST",body:{}});await refreshData();toast("Guest mode started.","success");}catch(e){toast(humanizeError(e),"error")}};
+  $("#guestLogin").onclick=async()=>{
+    const button=$("#guestLogin");
+    button.disabled=true;
+    button.textContent="Starting guest mode…";
+    try {
+      const d=await api("/guest",{method:"POST",body:{}});
+      const username=d?.guest?.username || d?.guest?.label || "Guest";
+      try { sessionStorage.setItem("advancedChessGuestUsername", username); } catch {}
+      location.replace("/chess.html");
+    } catch(e) {
+      button.disabled=false;
+      button.textContent="Continue as Guest";
+      toast(humanizeError(e),"error");
+    }
+  };
   $("#loginForm").onsubmit=async e=>{e.preventDefault();const err=$("#loginError");err.textContent="";try{const d=await api("/login",{method:"POST",body:{email:$("#loginEmail").value,password:$("#loginPassword").value}});if(d.requires2FA){openMFALogin();return;}state.csrf=d.csrfToken;await refreshData();location.hash="#profile";}catch(x){err.textContent=x.message==='invalid_credentials'?'Email or password is incorrect.':humanizeError(x)}};
   $$('a[href="#forgot-password"]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();openForgotPassword();}));
   $("#signupForm").onsubmit=async e=>{e.preventDefault();const err=$("#signupError");err.textContent="";if($("#signupPassword").value!==$("#signupPassword2").value){err.textContent="Passwords do not match.";return;}try{const d=await api("/signup",{method:"POST",body:{username:$("#signupUsername").value,email:$("#signupEmail").value,password:$("#signupPassword").value}});state.csrf=d.csrfToken;await refreshData();location.hash="#profile";toast(d.guestMigrated?"Account created and guest progress imported.":"Account created. Check your email to verify it.","success");}catch(x){err.textContent=humanizeError(x)}};
@@ -736,8 +778,8 @@ function mountHeader(){
     if(location.hash!==href){ location.hash=href; }
     renderRoute();
   }));
-  window.addEventListener('hashchange',()=>{if(location.hash==="#create-account"){showAuth();setAuthMode("signup");return;}renderRoute();});
-  window.addEventListener('popstate',()=>{if(location.hash==="#create-account"){showAuth();setAuthMode("signup");return;}renderRoute();});
+  window.addEventListener('hashchange',()=>{if(location.hash==="#create-account"){showAuth();setAuthMode("signup");return;}if(location.hash==="#sign-in"){showAuth();setAuthMode("login");return;}renderRoute();});
+  window.addEventListener('popstate',()=>{if(location.hash==="#create-account"){showAuth();setAuthMode("signup");return;}if(location.hash==="#sign-in"){showAuth();setAuthMode("login");return;}renderRoute();});
   $("#modal").addEventListener("click",e=>{if(e.target.id==="modal")e.currentTarget.hidden=true;});
 }
 
