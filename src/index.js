@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { Chess } from "chess.js";
+import { handleAccountRequest } from "./account/account.js";
 
 const PROTOCOL = 1;
 const GAME_ID_RE = /^[A-Z0-9]{8,16}$/;
@@ -111,7 +112,7 @@ function buildPgn(state) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const upgrade = request.headers.get("Upgrade");
 
@@ -134,6 +135,9 @@ export default {
       return id ? env.GAME_ROOMS.get(id).fetch(request) : new Response("Game not found", { status: 404 });
     }
 
+    const accountResponse = await handleAccountRequest(request, env, ctx);
+    if (accountResponse) return accountResponse;   
+   
     const response = await env.ASSETS.fetch(request);
     return withSecurityHeaders(response);
   }
