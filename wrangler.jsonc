@@ -12,6 +12,30 @@
       "/ws/*"
     ]
   },
+  "d1_databases": [
+    {
+      "binding": "ACCOUNTS",
+      "database_name": "advanced-chess-accounts",
+      "database_id": "707dc7bf-25e8-49f1-a73c-e8550bf1f381",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AVATARS",
+      "bucket_name": "advanced-chess-avatars"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "ACCOUNT_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {
