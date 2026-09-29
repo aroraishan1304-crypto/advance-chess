@@ -20,7 +20,7 @@ const MFA_MINUTES = 10;
 const USERNAME_MIN = 3;
 const USERNAME_MAX = 20;
 const MAX_PROFILE_ABOUT = 500;
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const MAX_AVATAR_BYTES = 512 * 1024;
 const ALLOWED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const CATEGORIES = ["bullet", "blitz", "rapid", "classical"];
 const PUZZLE_CATEGORY = "puzzle";
@@ -581,8 +581,8 @@ function detectAvatarType(bytes) {
 }
 
 async function uploadAvatar(request, env) {
-  const session = await requireAuth(request, env); await requireCsrf(request, session);
-  if (!env.AVATARS?.put) throw new Error("avatar_storage_not_configured");
+  const session = await requireAuth(request, env);
+  await requireCsrf(request, session);
   const form = await request.formData();
   const file = form.get("avatar");
   if (!(file instanceof File)) throw new Error("avatar_required");
@@ -590,32 +590,34 @@ async function uploadAvatar(request, env) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const detected = detectAvatarType(bytes);
   if (!detected || detected.mime !== file.type) throw new Error("invalid_avatar");
-  const key = `${session.user_id}/${randomId()}.${detected.ext}`;
-  await env.AVATARS.put(key, bytes, { httpMetadata: { contentType: detected.mime, cacheControl: "public, max-age=86400" } });
-  const old = session.avatar_key;
-  await env.ACCOUNTS.prepare("UPDATE users SET avatar_key=?,updated_at=? WHERE id=?").bind(key, Date.now(), session.user_id).run();
-  if (old) await env.AVATARS.delete(old).catch(() => {});
-  return ok({ ok: true, avatarUrl: `/api/account/avatar/${encodeURIComponent(session.user_id)}` });
+  const key = `${session.user_id}-${randomId()}.${detected.ext}`;
+  const now = Date.now();
+  await env.ACCOUNTS.prepare("UPDATE users SET avatar_key=?,avatar_mime=?,avatar_data=?,updated_at=? WHERE id=?")
+    .bind(key, detected.mime, bytes.buffer, now, session.user_id)
+    .run();
+  return ok({ ok: true, avatarUrl: `/api/account/avatar/${encodeURIComponent(session.user_id)}?v=${now}` });
 }
 
 async function serveAvatar(request, env) {
-  if (!env.AVATARS?.get) throw new Error("avatar_storage_not_configured");
   const userId = decodeURIComponent(new URL(request.url).pathname.split("/").pop() || "");
-  const user = await env.ACCOUNTS.prepare("SELECT id,avatar_key,profile_visibility,status FROM users WHERE id=? AND status='active'").bind(userId).first();
-  if (!user?.avatar_key) throw new Error("avatar_not_found");
+  const user = await env.ACCOUNTS.prepare("SELECT id,avatar_key,avatar_mime,avatar_data,profile_visibility,status FROM users WHERE id=? AND status='active'")
+    .bind(userId).first();
+  if (!user?.avatar_key || user.avatar_data == null || !user.avatar_mime) throw new Error("avatar_not_found");
   if (user.profile_visibility !== "public") {
     const current = await currentSession(request, env);
     if (!current || current.user_id !== user.id) {
       if (user.profile_visibility !== "friends" || !(await areFriends(env, current?.user_id, user.id))) throw new Error("profile_unavailable");
     }
   }
-  const object = await env.AVATARS.get(user.avatar_key);
-  if (!object) throw new Error("avatar_not_found");
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("Cache-Control", "private, max-age=86400");
-  headers.set("X-Content-Type-Options", "nosniff");
-  return new Response(object.body, { headers });
+  const bytes = user.avatar_data instanceof ArrayBuffer
+    ? new Uint8Array(user.avatar_data)
+    : new Uint8Array(Array.isArray(user.avatar_data) ? user.avatar_data : Object.values(user.avatar_data));
+  const headers = new Headers({
+    "Content-Type": user.avatar_mime,
+    "Cache-Control": "private, max-age=86400",
+    "X-Content-Type-Options": "nosniff"
+  });
+  return new Response(bytes, { headers });
 }
 
 async function getSettings(request, env) { const session = await requireAuth(request, env); return ok({ settings: await settingsForUser(env, session.user_id), csrfToken: parseCookies(request.headers.get("Cookie"))[CSRF_COOKIE] || null }); }
@@ -824,7 +826,6 @@ async function deleteAccount(request,env){
     env.ACCOUNTS.prepare("DELETE FROM users WHERE id=?").bind(id)
   ];
   await env.ACCOUNTS.batch(statements);
-  if(current?.avatar_key&&env.AVATARS?.delete)await env.AVATARS.delete(current.avatar_key).catch(()=>{});
   return responseWithCookies({ok:true,deleted:true},[clearCookie(SESSION_COOKIE),clearCookie(CSRF_COOKIE),clearCookie(GUEST_COOKIE)]);
 }
 
@@ -955,4 +956,3 @@ async function userById(env,id){return env.ACCOUNTS.prepare("SELECT * FROM users
 function publicUser(u,self=false){if(!u)return null;const base={id:u.id,username:u.username,displayName:u.display_name,about:u.about||'',country:u.country||null,timezone:u.timezone||null,avatarUrl:u.avatar_key?`/api/account/avatar/${encodeURIComponent(u.id)}`:null,profileVisibility:u.profile_visibility,onlineVisibility:!!u.online_visibility,createdAt:u.created_at,lastSeenAt:u.online_visibility?u.last_seen_at:null,isSelf:self};if(self){base.email=u.email||null;base.emailVerified=!!u.email_verified;base.passwordLoginEnabled=!!u.password_hash;base.friendRequestSetting=u.friend_request_setting;base.challengeSetting=u.challenge_setting;base.searchable=!!u.searchable;base.twoFactorEnabled=!!u.two_factor_enabled;}return base;}
 
 export { expectedScore, eloDelta, normalizeUsername, validateUsername, publicUser };
-
