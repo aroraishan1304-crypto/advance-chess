@@ -77,6 +77,23 @@ function formatDelta(value) {
 }
 function avatarUrl(user) { return user?.avatarUrl || "/account/default-avatar.svg"; }
 
+async function prepareAvatarFile(file){
+  if(file.size <= 450*1024 && ["image/jpeg","image/png","image/webp"].includes(file.type)) return file;
+  if(!["image/jpeg","image/png","image/webp"].includes(file.type)) throw new Error("invalid_avatar");
+  const bitmap=await createImageBitmap(file);
+  const max=256;
+  const scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+  const w=Math.max(1,Math.round(bitmap.width*scale));
+  const h2=Math.max(1,Math.round(bitmap.height*scale));
+  const canvas=document.createElement("canvas");canvas.width=w;canvas.height=h2;
+  const ctx=canvas.getContext("2d",{alpha:false});
+  if(!ctx)throw new Error("invalid_avatar");
+  ctx.fillStyle="#111820";ctx.fillRect(0,0,w,h2);ctx.drawImage(bitmap,0,0,w,h2);bitmap.close?.();
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.82));
+  if(!blob || blob.size>512*1024) throw new Error("invalid_avatar");
+  return new File([blob], "avatar.jpg", {type:"image/jpeg"});
+}
+
 function userAvatar(user, className = "") {
   const img = document.createElement("img");
   img.className = className;
@@ -560,9 +577,18 @@ function renderSettings() {
   preview.alt = "Current profile picture preview";
   const file = h("input", { type:"file", accept:"image/jpeg,image/png,image/webp" });
   file.addEventListener("change",()=>{const selected=file.files?.[0];if(!selected)return;const url=URL.createObjectURL(selected);preview.src=url;preview.onload=()=>URL.revokeObjectURL(url);});
-  const hint = h("p", { class:"muted small-text", text:"JPEG, PNG or WebP · up to 2 MiB. A live preview appears before upload." });
+  const hint = h("p", { class:"muted small-text", text:"JPEG, PNG or WebP · up to 512 KiB after automatic compression. A live preview appears before upload." });
   const upload = h("button", { class:"secondary-btn", text:"Upload picture" });
-  upload.onclick = async()=>{ if(!file.files[0])return toast("Choose an image first.","error"); const fd=new FormData();fd.append("avatar",file.files[0]);try{const d=await api("/avatar",{method:"POST",body:fd});state.me.avatarUrl=d.avatarUrl+`?v=${Date.now()}`;renderSide();toast("Profile picture updated.","success");}catch(e){toast(humanizeError(e),"error");} };
+  upload.onclick = async()=>{
+    const selected=file.files[0];
+    if(!selected)return toast("Choose an image first.","error");
+    try{
+      const prepared=await prepareAvatarFile(selected);
+      const fd=new FormData();fd.append("avatar",prepared,prepared.name||"avatar.jpg");
+      const d=await api("/avatar",{method:"POST",body:fd});
+      state.me.avatarUrl=d.avatarUrl;renderSide();toast("Profile picture updated.","success");
+    }catch(e){toast(humanizeError(e),"error");}
+  };
   avatar.append(file,hint,upload); root.append(avatar);
 
   const gameplay = h("section", { class:"card" }); gameplay.append(h("div", { class:"card-head" }, [h("h3", { text:"Gameplay" })]));
@@ -663,7 +689,7 @@ function openDelete(){
   const actions=h("div",{class:"modal-actions"});const cancel=h("button",{class:"secondary-btn",text:"Cancel"});const del=h("button",{class:"danger-btn",text:"Delete permanently"});cancel.onclick=()=>m.hidden=true;del.onclick=async()=>{try{const body={username:ui.value};if(c._password)body.password=c._password.value;if(c._two)body.twoFactorCode=c._two.value;await api("/delete",{method:"POST",body});m.hidden=true;state.me=null;state.guest=null;state.csrf=null;showAuth();setAuthMode("login");toast("Your account has been deleted.","success");}catch(e){toast(humanizeError(e),"error")}};actions.append(cancel,del);c.append(actions);m.append(c);ui.focus();
 }
 
-function humanizeError(e){const code=String(e?.message||"");const map={invalid_credentials:"The details you entered are incorrect.",username_or_email_taken:"That username or email is already in use.",username_taken:"That username is already taken.",username_reserved:"That username is reserved.",invalid_username:"That username is not valid.",invalid_email:"Enter a valid email address.",invalid_password:"Use a password of at least 8 characters.",invalid_csrf:"Your session expired. Refresh the page and try again.",unauthorized:"Please sign in again.",email_not_configured:"Email delivery is not configured yet.",google_not_configured:"Google sign-in has not been configured yet.",challenge_already_pending:"You already have a pending challenge for this player.",challenges_disabled:"This player is not accepting challenges from you.",friend_requests_disabled:"This player is not accepting friend requests from you.",blocked:"This action is unavailable because one of the players is blocked.",invalid_2fa_code:"That authentication code is not valid.",confirmation_required:"The confirmation did not match your username.",password_login_not_enabled:"This account does not have a local password.",avatar_storage_not_configured:"Profile picture storage is not configured yet.",invalid_avatar:"That image is not a supported or valid avatar file.",profile_private:"This profile is private.",profile_unavailable:"This profile is unavailable to you.",invalid_rematch:"That rematch is no longer available.",tournament_full:"This tournament is full.",tournament_not_found:"That tournament is not available.",tournament_invalid:"That tournament is not valid.",rate_limit_exceeded:"Too many requests. Please wait a moment and try again."};return map[code]||code.replaceAll("_"," ")||"Something went wrong.";}
+function humanizeError(e){const code=String(e?.message||"");const map={invalid_credentials:"The details you entered are incorrect.",username_or_email_taken:"That username or email is already in use.",username_taken:"That username is already taken.",username_reserved:"That username is reserved.",invalid_username:"That username is not valid.",invalid_email:"Enter a valid email address.",invalid_password:"Use a password of at least 8 characters.",invalid_csrf:"Your session expired. Refresh the page and try again.",unauthorized:"Please sign in again.",email_not_configured:"Email delivery is not configured yet.",google_not_configured:"Google sign-in has not been configured yet.",challenge_already_pending:"You already have a pending challenge for this player.",challenges_disabled:"This player is not accepting challenges from you.",friend_requests_disabled:"This player is not accepting friend requests from you.",blocked:"This action is unavailable because one of the players is blocked.",invalid_2fa_code:"That authentication code is not valid.",confirmation_required:"The confirmation did not match your username.",password_login_not_enabled:"This account does not have a local password.",invalid_avatar:"That image is not a supported or valid avatar file.",profile_private:"This profile is private.",profile_unavailable:"This profile is unavailable to you.",invalid_rematch:"That rematch is no longer available.",tournament_full:"This tournament is full.",tournament_not_found:"That tournament is not available.",tournament_invalid:"That tournament is not valid.",rate_limit_exceeded:"Too many requests. Please wait a moment and try again."};return map[code]||code.replaceAll("_"," ")||"Something went wrong.";}
 
 async function refreshData(){
   const d=await api("/me");
