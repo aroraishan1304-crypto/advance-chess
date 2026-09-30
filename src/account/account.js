@@ -521,7 +521,7 @@ async function googleCallback(request, env) {
   const identity = await env.ACCOUNTS.prepare("SELECT user_id FROM auth_identities WHERE provider='google' AND provider_subject=?").bind(profile.subject).first();
   if (identity) {
     const session = await issueSession(env, identity.user_id, request, [clearCookie(OAUTH_COOKIE)]);
-    return responseRedirectWithCookies("/account/index.html#profile", session.cookies);
+    return responseRedirectWithCookies("/chess.html", session.cookies);
   }
   const emailOwner = await env.ACCOUNTS.prepare("SELECT id,email_verified FROM users WHERE email_norm=? AND status='active'").bind(profile.email).first();
   if (emailOwner) throw new Error("google_email_exists_sign_in_and_link");
