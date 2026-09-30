@@ -5,6 +5,7 @@ const css = `
 .ac-account-root{
     position:relative;
     flex:none;
+    min-width:0;
     z-index:1000;
     font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
@@ -41,16 +42,19 @@ const css = `
 
 .ac-account-text{
     min-width:0;
-    flex:1;
-    display:flex;
-    flex-direction:column;
-    align-items:flex-start;
+    flex:1 1 auto;
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto;
+    row-gap:5px;
+    align-items:start;
     justify-content:center;
     text-align:left;
 }
 
 .ac-account-name{
     display:block;
+    min-width:0;
     width:100%;
     overflow:hidden;
     text-overflow:ellipsis;
@@ -62,7 +66,7 @@ const css = `
 
 .ac-account-kind{
     display:block;
-    margin-top:4px;
+    margin:0;
     font-size:10px;
     line-height:1.1;
     font-weight:700;
@@ -157,6 +161,34 @@ const css = `
 }
 
 @media(max-width:720px){
+    .home-top-actions{
+        display:grid !important;
+        grid-template-columns:auto auto;
+        grid-template-rows:auto auto;
+        align-items:center !important;
+        justify-content:end !important;
+        gap:6px !important;
+    }
+
+    .home-top-actions .ac-account-root{
+        grid-column:1 / -1;
+        grid-row:1;
+        justify-self:end;
+        margin-bottom:2px;
+    }
+
+    .home-top-actions .home-top-action{
+        grid-row:2;
+    }
+
+    .home-top-actions .home-top-action:first-child{
+        grid-column:1;
+    }
+
+    .home-top-actions .home-top-action:nth-child(2){
+        grid-column:2;
+    }
+
     .ac-account-button{
         width:178px;
         min-width:178px;
@@ -168,10 +200,6 @@ const css = `
 
     .ac-account-menu{
         width:205px;
-    }
-
-    .home-top-actions{
-        gap:6px !important;
     }
 }
 `;
