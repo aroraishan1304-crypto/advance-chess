@@ -3,30 +3,31 @@ const DEFAULT_AVATAR = "/account/default-avatar.svg";
 
 const css = `
 .ac-account-root{
-    position:fixed;
-    top:12px;
-    right:14px;
-    z-index:99999;
-    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif
+    position:relative;
+    flex:none;
+    z-index:1000;
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
 
 .ac-account-button{
     display:flex;
     align-items:center;
     gap:10px;
+    width:190px;
     min-width:190px;
-    padding:7px 10px 7px 8px;
+    box-sizing:border-box;
+    padding:6px 10px 6px 7px;
     border:1px solid rgba(255,255,255,.13);
     border-radius:999px;
-    background:rgba(18,22,29,.94);
+    background:rgba(18,22,29,.96);
     color:#eef2f7;
-    box-shadow:0 10px 30px rgba(0,0,0,.28);
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
     cursor:pointer;
-    backdrop-filter:blur(10px)
+    backdrop-filter:blur(10px);
 }
 
 .ac-account-button:hover{
-    background:rgba(27,33,42,.97)
+    background:rgba(27,33,42,.98);
 }
 
 .ac-account-avatar{
@@ -35,7 +36,7 @@ const css = `
     border-radius:50%;
     object-fit:cover;
     background:#11161d;
-    flex:none
+    flex:none;
 }
 
 .ac-account-text{
@@ -43,50 +44,52 @@ const css = `
     flex:1;
     display:flex;
     flex-direction:column;
+    align-items:flex-start;
     justify-content:center;
-    align-items:flex-start
+    text-align:left;
 }
 
 .ac-account-name{
     display:block;
     width:100%;
-    font-size:12px;
-    font-weight:850;
-    line-height:1.25;
     overflow:hidden;
     text-overflow:ellipsis;
-    white-space:nowrap
+    white-space:nowrap;
+    font-size:12px;
+    line-height:1.2;
+    font-weight:850;
 }
 
 .ac-account-kind{
     display:block;
     margin-top:4px;
     font-size:10px;
-    color:#9ea8b5;
+    line-height:1.1;
     font-weight:700;
-    line-height:1.1
+    color:#9ea8b5;
 }
 
 .ac-account-chevron{
+    flex:none;
     font-size:12px;
     color:#8e99a7;
-    flex:none
 }
 
 .ac-account-menu{
     position:absolute;
+    top:calc(100% + 8px);
     right:0;
-    top:50px;
     width:220px;
     padding:8px;
+    box-sizing:border-box;
     border:1px solid rgba(255,255,255,.11);
     border-radius:14px;
     background:rgba(18,22,29,.98);
-    box-shadow:0 18px 50px rgba(0,0,0,.42)
+    box-shadow:0 18px 50px rgba(0,0,0,.42);
 }
 
 .ac-account-menu[hidden]{
-    display:none
+    display:none;
 }
 
 .ac-account-menu-head{
@@ -94,7 +97,21 @@ const css = `
     gap:10px;
     padding:10px;
     border-bottom:1px solid rgba(255,255,255,.08);
-    margin-bottom:6px
+    margin-bottom:6px;
+}
+
+.ac-account-menu-head img{
+    width:30px;
+    height:30px;
+    border-radius:50%;
+    object-fit:cover;
+    flex:none;
+}
+
+.ac-account-menu-head strong{
+    display:block;
+    font-size:12px;
+    color:#eef2f7;
 }
 
 .ac-account-menu a,
@@ -110,52 +127,51 @@ const css = `
     text-align:left;
     font-size:12px;
     font-weight:700;
-    cursor:pointer
+    cursor:pointer;
+    box-sizing:border-box;
 }
 
 .ac-account-menu a:hover,
 .ac-account-menu button:hover{
-    background:#222a34
+    background:#222a34;
 }
 
 .ac-account-menu .ac-muted{
+    margin-top:3px;
     color:#96a0ae;
     font-size:10px;
     font-weight:700;
-    margin-top:3px
 }
 
 .ac-account-menu .ac-divider{
     height:1px;
     background:rgba(255,255,255,.08);
-    margin:6px 0
+    margin:6px 0;
 }
 
-/* Keep the account strip from covering the existing top-right buttons. */
-.home-topbar{
-    padding-right:250px !important;
+.home-top-actions{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:flex-end !important;
+    gap:8px !important;
 }
 
 @media(max-width:720px){
-    .ac-account-root{
-        top:8px;
-        right:8px
-    }
-
     .ac-account-button{
-        min-width:175px
+        width:178px;
+        min-width:178px;
     }
 
     .ac-account-name{
-        max-width:115px
+        max-width:105px;
     }
 
     .ac-account-menu{
-        width:205px
+        width:205px;
     }
 
-    .home-topbar{
-        padding-right:220px !important;
+    .home-top-actions{
+        gap:6px !important;
     }
 }
 `;
@@ -163,44 +179,44 @@ const css = `
 function ensureStyles() {
     if (document.getElementById("ac-account-styles")) return;
 
-    const s = document.createElement("style");
-    s.id = "ac-account-styles";
-    s.textContent = css;
-    document.head.appendChild(s);
+    const style = document.createElement("style");
+    style.id = "ac-account-styles";
+    style.textContent = css;
+    document.head.appendChild(style);
+}
+
+async function getMe() {
+    const response = await fetch(`${API}/me`, {
+        credentials: "same-origin",
+        cache: "no-store"
+    });
+
+    let data = {};
+
+    try {
+        data = await response.json();
+    } catch {}
+
+    if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}`);
+    }
+
+    return data;
 }
 
 function accountHref(hash) {
     return `/account/index.html${hash || ""}`;
 }
 
-async function getMe() {
-    const r = await fetch(`${API}/me`, {
-        credentials: "same-origin",
-        cache: "no-store"
-    });
-
-    let d = {};
-
-    try {
-        d = await r.json();
-    } catch {}
-
-    if (!r.ok) {
-        throw new Error(d.error || `HTTP ${r.status}`);
-    }
-
-    return d;
-}
-
 function makeButton(label, kind, avatar) {
     const root = document.createElement("div");
     root.className = "ac-account-root";
 
-    const btn = document.createElement("button");
-    btn.className = "ac-account-button";
-    btn.type = "button";
-    btn.setAttribute("aria-haspopup", "menu");
-    btn.setAttribute("aria-expanded", "false");
+    const button = document.createElement("button");
+    button.className = "ac-account-button";
+    button.type = "button";
+    button.setAttribute("aria-haspopup", "menu");
+    button.setAttribute("aria-expanded", "false");
 
     const img = document.createElement("img");
     img.className = "ac-account-avatar";
@@ -214,19 +230,22 @@ function makeButton(label, kind, avatar) {
 
     const text = document.createElement("span");
     text.className = "ac-account-text";
-    text.innerHTML = `
-        <span class="ac-account-name"></span>
-        <span class="ac-account-kind"></span>
-    `;
 
-    text.querySelector(".ac-account-name").textContent = label;
-    text.querySelector(".ac-account-kind").textContent = kind;
+    const name = document.createElement("span");
+    name.className = "ac-account-name";
+    name.textContent = label;
 
-    const chev = document.createElement("span");
-    chev.className = "ac-account-chevron";
-    chev.textContent = "⌄";
+    const type = document.createElement("span");
+    type.className = "ac-account-kind";
+    type.textContent = kind;
 
-    btn.append(img, text, chev);
+    text.append(name, type);
+
+    const chevron = document.createElement("span");
+    chevron.className = "ac-account-chevron";
+    chevron.textContent = "⌄";
+
+    button.append(img, text, chevron);
 
     const menu = document.createElement("div");
     menu.className = "ac-account-menu";
@@ -236,25 +255,29 @@ function makeButton(label, kind, avatar) {
     const head = document.createElement("div");
     head.className = "ac-account-menu-head";
 
-    const htxt = document.createElement("div");
+    const headImg = document.createElement("img");
+    headImg.src = avatar || DEFAULT_AVATAR;
+    headImg.alt = "";
 
-    const strong = document.createElement("strong");
-    strong.textContent = label;
+    const headText = document.createElement("div");
 
-    const small = document.createElement("div");
-    small.className = "ac-muted";
-    small.textContent = kind;
+    const headName = document.createElement("strong");
+    headName.textContent = label;
 
-    htxt.append(strong, small);
-    head.append(img.cloneNode(true), htxt);
+    const headType = document.createElement("div");
+    headType.className = "ac-muted";
+    headType.textContent = kind;
+
+    headText.append(headName, headType);
+    head.append(headImg, headText);
     menu.append(head);
 
     const addLink = (textValue, hash) => {
-        const a = document.createElement("a");
-        a.href = accountHref(hash);
-        a.role = "menuitem";
-        a.textContent = textValue;
-        menu.append(a);
+        const link = document.createElement("a");
+        link.href = accountHref(hash);
+        link.textContent = textValue;
+        link.setAttribute("role", "menuitem");
+        menu.append(link);
     };
 
     addLink("Profile", "#profile");
@@ -266,74 +289,75 @@ function makeButton(label, kind, avatar) {
     divider.className = "ac-divider";
     menu.append(divider);
 
-    const create = document.createElement("a");
-    create.href = accountHref("#create-account");
-    create.textContent = "Create account";
-    menu.append(create);
+    addLink("Create account", "#create-account");
+    addLink("Sign in", "#sign-in");
 
-    const sign = document.createElement("a");
-    sign.href = accountHref("#sign-in");
-    sign.textContent = "Sign in";
-    menu.append(sign);
+    button.addEventListener("click", event => {
+        event.stopPropagation();
 
-    btn.addEventListener("click", () => {
         menu.hidden = !menu.hidden;
-        btn.setAttribute(
+        button.setAttribute(
             "aria-expanded",
             String(!menu.hidden)
         );
     });
 
-    document.addEventListener("click", e => {
-        if (!root.contains(e.target)) {
+    document.addEventListener("click", event => {
+        if (!root.contains(event.target)) {
             menu.hidden = true;
-            btn.setAttribute("aria-expanded", "false");
+            button.setAttribute("aria-expanded", "false");
         }
     });
 
-    root.append(btn, menu);
-    document.body.append(root);
+    root.append(button, menu);
+
+    // Put the account control INSIDE the existing top-right action group.
+    // This prevents it from floating over the notification/settings buttons.
+    const topActions = document.querySelector(".home-top-actions");
+
+    if (topActions) {
+        topActions.appendChild(root);
+    } else {
+        document.body.appendChild(root);
+    }
 }
 
-(async function boot() {
+async function boot() {
     ensureStyles();
 
     try {
-        const d = await getMe();
+        const data = await getMe();
 
-        if (d?.authenticated && d.user) {
+        if (data?.authenticated && data.user) {
             makeButton(
-                d.user.username,
+                data.user.username,
                 "Player",
-                d.user.avatarUrl || DEFAULT_AVATAR
+                data.user.avatarUrl || DEFAULT_AVATAR
             );
             return;
         }
 
-        if (d?.guest && d.guestProfile) {
+        if (data?.guest && data.guestProfile) {
             makeButton(
-                d.guestProfile.username ||
-                    d.guestProfile.label ||
+                data.guestProfile.username ||
+                    data.guestProfile.label ||
                     "Guest",
                 "Guest",
-                d.guestProfile.avatarUrl ||
+                data.guestProfile.avatarUrl ||
                     DEFAULT_AVATAR
             );
             return;
         }
 
-        const root = document.createElement("div");
-        root.className = "ac-account-root";
+        makeButton("Account", "Sign in", DEFAULT_AVATAR);
 
-        const a = document.createElement("a");
-        a.href = accountHref("#sign-in");
-        a.className = "ac-account-button";
-        a.textContent = "Sign in";
-
-        root.append(a);
-        document.body.append(root);
-
-    } catch (e) {
-        console.warn("Account UI failed to load:", e);
+    } catch (error) {
+        console.warn("Account UI failed to load:", error);
     }
-})();
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+} else {
+    boot();
+}
