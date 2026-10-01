@@ -64,12 +64,12 @@ jobs:
 
       - name: Commit generated catalogue
         run: |
-          if git diff --quiet -- public/openings/catalog.json; then
+          git add public/openings/catalog.json
+          if git diff --cached --quiet; then
             echo "catalog.json is already up to date."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add public/openings/catalog.json
             git commit -m "Build Opening Atlas catalogue"
             git push
           fi
