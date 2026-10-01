@@ -521,14 +521,17 @@ async function googleCallback(request, env) {
   const identity = await env.ACCOUNTS.prepare("SELECT user_id FROM auth_identities WHERE provider='google' AND provider_subject=?").bind(profile.subject).first();
   if (identity) {
     const session = await issueSession(env, identity.user_id, request, [clearCookie(OAUTH_COOKIE)]);
-    return responseRedirectWithCookies("/chess.html", session.cookies);
+    return responseRedirectWithCookies("/chess", session.cookies);
   }
   const emailOwner = await env.ACCOUNTS.prepare("SELECT id,email_verified FROM users WHERE email_norm=? AND status='active'").bind(profile.email).first();
   if (emailOwner) throw new Error("google_email_exists_sign_in_and_link");
   const pending = randomToken(32);
   await env.ACCOUNTS.prepare("INSERT INTO oauth_pending(id,token_hash,provider,provider_subject,email,display_name,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)")
     .bind(randomId(), await sha256Hex(pending), "google", profile.subject, profile.email, profile.displayName, Date.now(), Date.now() + OAUTH_MINUTES * 60000).run();
-  return responseRedirectWithCookies(`/account/index.html#google-complete?token=${encodeURIComponent(pending)}`, [clearCookie(OAUTH_COOKIE)]);
+  return responseRedirectWithCookies(
+   `/account/#google-complete?token=${encodeURIComponent(pending)}`,
+   [clearCookie(OAUTH_COOKIE)]
+  );
 }
 
 function responseRedirectWithCookies(location, cookies) {
