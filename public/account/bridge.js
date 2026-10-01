@@ -602,3 +602,21 @@ window.addEventListener("ac-account-open", (event) => {
 
     dialog.showModal();
 });
+
+window.addEventListener("message", (event) => {
+    if (event.origin !== window.location.origin) return;
+
+    if (event.data?.type !== "ac-account-auth-complete") return;
+
+    const frame = document.getElementById("acAccountFrame");
+
+    if (frame && event.source !== frame.contentWindow) return;
+
+    const dialog = document.getElementById("acAccountDialog");
+
+    if (dialog?.open) {
+        dialog.close();
+    }
+
+    window.location.reload();
+});
