@@ -486,12 +486,14 @@ function makeButton(label, kind, avatar) {
     addLink("Stats", "#stats");
     addLink("Settings", "#settings");
 
-    const divider = document.createElement("div");
-    divider.className = "ac-divider";
-    menu.append(divider);
+    if (kind !== "Player") {
+        const divider = document.createElement("div");
+        divider.className = "ac-divider";
+        menu.append(divider);
 
-    addLink("Create account", "#create-account");
-    addLink("Sign in", "#sign-in");
+        addLink("Create account", "#create-account");
+        addLink("Sign in", "#sign-in");
+    }
 
     button.addEventListener("click", event => {
         event.stopPropagation();
