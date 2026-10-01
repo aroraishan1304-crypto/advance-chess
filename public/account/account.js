@@ -440,22 +440,32 @@ function clearContent() {
   $("#content").replaceChildren();
 }
 
+function setView(view) {
+  const views = {
+    auth: $("#authView"),
+    account: $("#accountView"),
+    guest: $("#guestView"),
+  };
+
+  Object.values(views).forEach((el) => {
+    el.hidden = true;
+  });
+
+  if (views[view]) {
+    views[view].hidden = false;
+  }
+}
+
 function showAuth() {
-  $("#authView").hidden = false;
-  $("#accountView").hidden = true;
-  $("#guestView").hidden = true;
+  setView("auth");
 }
 
 function showAccount() {
-  $("#authView").hidden = true;
-  $("#accountView").hidden = false;
-  $("#guestView").hidden = true;
+  setView("account");
 }
 
 function showGuest() {
-  $("#authView").hidden = true;
-  $("#accountView").hidden = true;
-  $("#guestView").hidden = false;
+  setView("guest");
 }
 
 function setAuthMode(mode) {
