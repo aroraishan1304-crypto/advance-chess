@@ -1,3 +1,6 @@
+if (window.self !== window.top) {
+  document.documentElement.classList.add("embedded-account");
+}
 const state = {
   me: null,
   guest: null,
