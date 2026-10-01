@@ -717,7 +717,27 @@ async function me(request, env) {
   const settings = await settingsForUser(env, session.user_id);
   const ratings = await ratingRows(env, session.user_id);
   const puzzle = await env.ACCOUNTS.prepare("SELECT * FROM puzzle_stats WHERE user_id=?").bind(session.user_id).first();
-  return ok({ authenticated: true, user, csrfToken: parseCookies(request.headers.get("Cookie"))[CSRF_COOKIE] || null, settings, ratings, puzzle });
+
+  const guest = await currentGuest(request, env);
+  const guestData = guest?.data || {};
+
+  const guestHasProgress =
+   (Array.isArray(guestData.games) && guestData.games.length > 0) ||
+   (Array.isArray(guestData.puzzleAttempts) && guestData.puzzleAttempts.length > 0) ||
+   Number(guestData.puzzles?.games || 0) > 0 ||
+   Object.values(guestData.ratings || {}).some(
+    rating => Number(rating?.games || 0) > 0
+   );
+
+  return ok({
+   authenticated: true,
+   user,
+   csrfToken: parseCookies(request.headers.get("Cookie"))[CSRF_COOKIE] || null,
+   settings,
+   ratings,
+   puzzle,
+   guestHasProgress,
+  });
 }
 
 
@@ -1246,4 +1266,3 @@ async function tournamentStandings(request,env){const url=new URL(request.url);c
 
 async function userById(env,id){return env.ACCOUNTS.prepare("SELECT * FROM users WHERE id=? AND status='active'").bind(id).first();}
 function publicUser(u,self=false){if(!u)return null;const base={id:u.id,username:u.username,displayName:u.display_name,about:u.about||'',country:u.country||null,timezone:u.timezone||null,avatarUrl:u.avatar_key?`/api/account/avatar/${encodeURIComponent(u.id)}`:null,profileVisibility:u.profile_visibility,onlineVisibility:!!u.online_visibility,createdAt:u.created_at,lastSeenAt:u.online_visibility?u.last_seen_at:null,isSelf:self};if(self){base.email=u.email||null;base.emailVerified=!!u.email_verified;base.passwordLoginEnabled=!!u.password_hash;base.friendRequestSetting=u.friend_request_setting;base.challengeSetting=u.challenge_setting;base.searchable=!!u.searchable;base.twoFactorEnabled=!!u.two_factor_enabled;}return base;}
-
