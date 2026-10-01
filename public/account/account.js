@@ -4,6 +4,7 @@ if (window.self !== window.top) {
 const state = {
   me: null,
   guest: null,
+  guestHasProgress: false,
   ratings: [],
   ratingHistory: {},
   puzzle: null,
@@ -138,6 +139,7 @@ async function refreshData() {
   state.csrf = me.csrfToken || me.guestCsrfToken || state.csrf;
   state.me = me.authenticated ? me.user : null;
   state.guest = me.guest ? me.guestProfile : null;
+  state.guestHasProgress = !!me.guestHasProgress;
 
   if (!state.me) {
     state.ratings = [];
@@ -3891,14 +3893,20 @@ function renderSettings() {
   del.onclick = () =>
     openDelete();
 
+  const accountActions = [
+   exportBtn,
+  ];
+
+  if (state.guestHasProgress) {
+   accountActions.push(migrate);
+  }
+
+  accountActions.push(del);
+
   account.append(
-    h("div", {
-      class: "chips",
-    }, [
-      exportBtn,
-      migrate,
-      del,
-    ])
+   h("div", {
+    class: "chips",
+   }, accountActions)
   );
 
   root.append(account);
