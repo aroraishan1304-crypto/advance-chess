@@ -1,4 +1,4 @@
-name: Opening Atlas checks
+  name: Opening Atlas checks
 
 on:
   push:
@@ -11,6 +11,7 @@ on:
       - 'scripts/build-openings.mjs'
       - 'package.json'
       - 'package-lock.json'
+
   pull_request:
     paths:
       - 'public/chess.html'
@@ -22,6 +23,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
 
+  workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -29,6 +32,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
