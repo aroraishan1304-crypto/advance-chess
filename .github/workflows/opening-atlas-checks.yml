@@ -1,6 +1,6 @@
-  name: Opening Atlas checks
+name: Opening Atlas checks
 
-on:
+'on':
   push:
     paths:
       - 'public/chess.html'
