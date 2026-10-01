@@ -1,6 +1,17 @@
 if (window.self !== window.top) {
   document.documentElement.classList.add("embedded-account");
 }
+function completeEmbeddedAuth() {
+  if (window.self !== window.top) {
+    window.parent.postMessage(
+      { type: "ac-account-auth-complete" },
+      window.location.origin
+    );
+    return true;
+  }
+
+  return false;
+}
 const state = {
   me: null,
   guest: null,
@@ -5327,8 +5338,12 @@ function mountHeader() {
           );
         } catch {}
 
+        if (completeEmbeddedAuth()) {
+         return;
+        }
+
         location.replace(
-          "/chess.html"
+         "/chess.html"
         );
       } catch (e) {
         button.disabled =
@@ -5378,8 +5393,12 @@ function mountHeader() {
           return;
         }
 
+        if (completeEmbeddedAuth()) {
+         return;
+        }
+
         location.replace(
-          "/chess.html"
+         "/chess.html"
         );
       } catch (x) {
         err.textContent =
@@ -5442,8 +5461,12 @@ function mountHeader() {
           }
         );
 
+        if (completeEmbeddedAuth()) {
+         return;
+        }
+
         location.replace(
-          "/chess.html"
+         "/chess.html"
         );
       } catch (x) {
         err.textContent =
@@ -5877,9 +5900,13 @@ function openMFALogin() {
 
       m.hidden = true;
 
-      location.replace(
-        "/chess.html"
-      );
+        if (completeEmbeddedAuth()) {
+         return;
+        }
+
+        location.replace(
+         "/chess.html"
+        );
     } catch (e) {
       toast(
         humanizeError(e),
@@ -6185,9 +6212,13 @@ async function boot() {
             }
           );
 
-          location.replace(
-            "/chess.html"
-          );
+        if (completeEmbeddedAuth()) {
+         return;
+        }
+
+        location.replace(
+         "/chess.html"
+        );
         } catch (x) {
           err.textContent =
             humanizeError(x);
