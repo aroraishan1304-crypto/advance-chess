@@ -1,0 +1,57 @@
+name: Opening Atlas checks
+
+on:
+  push:
+    paths:
+      - 'public/chess.html'
+      - 'public/openings/**'
+      - 'src/index.js'
+      - 'src/openings.js'
+      - 'scripts/opening-*.mjs'
+      - 'scripts/build-openings.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - 'public/chess.html'
+      - 'public/openings/**'
+      - 'src/index.js'
+      - 'src/openings.js'
+      - 'scripts/opening-*.mjs'
+      - 'scripts/build-openings.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax checks
+        run: |
+          node --check src/index.js
+          node --check src/openings.js
+          node --check public/openings/openings.js
+          node --check scripts/build-openings.mjs
+          node --check scripts/opening-atlas-smoke.mjs
+          node --check scripts/opening-frontend-smoke.mjs
+
+      - name: Opening Atlas smoke checks
+        run: |
+          npm run audit:openings
+          node scripts/opening-atlas-smoke.mjs
