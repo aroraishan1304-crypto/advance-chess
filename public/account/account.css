@@ -266,7 +266,10 @@ img { max-width: 100%; }
 .setting-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .content input.switch { appearance: none; position: relative; width: 42px; height: 23px; flex: 0 0 auto; border: 1px solid #37414d; border-radius: 999px; outline: none; background: #252d35; }
 .switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: #9ea8b2; transition: transform .18s ease, background .18s ease; }
-.switch:checked { border-color: #428bd0; background: #377cb9; }
+.content input.switch:checked {
+    border-color: #428bd0;
+    background: #377cb9;
+}
 .switch:checked::before { transform: translateX(19px); background: white; }
 .notice { padding: 12px; border: 1px solid #33414f; border-radius: 11px; color: #bdc7d1; background: #10171e; font-size: 11px; line-height: 1.5; }
 .danger-zone { border-color: #4f292d; background: linear-gradient(180deg, rgba(35,18,20,.88), rgba(20,15,17,.92)); }
