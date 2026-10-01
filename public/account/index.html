@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Advanced Chess account, profile, ratings and friends">
+  <title>Advanced Chess — Account</title>
+  <link rel="stylesheet" href="./account.css">
+</head>
+<body>
+  <div class="shell" id="app">
+    <header class="topbar">
+      <a class="brand" href="/chess.html" aria-label="Back to Advanced Chess">
+        <span class="brand-mark">♞</span>
+        <span><strong>Advanced Chess</strong><small>ACCOUNT</small></span>
+      </a>
+      <div class="top-actions">
+        <a class="top-link" href="/chess.html">Play</a>
+        <button class="icon-btn" id="notifBtn" aria-label="Notifications"><span>🔔</span><b id="notifCount" hidden>0</b></button>
+        <div class="user-menu-wrap">
+          <button class="user-menu" id="profileMenuBtn" hidden aria-haspopup="menu" aria-expanded="false">
+            <img id="topAvatar" alt="Profile picture">
+            <span id="topUsername">Account</span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+          <div class="profile-menu" id="profileMenu" hidden role="menu">
+            <a href="#profile" role="menuitem">Profile</a>
+            <a href="#settings" role="menuitem">Settings</a>
+            <a href="#security" role="menuitem">Security</a>
+            <button id="menuSignout" role="menuitem">Sign out</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="auth-view" id="authView" hidden>
+        <div class="auth-visual">
+          <div class="eyebrow">THE PLAYER IDENTITY LAYER</div>
+          <h1>Your chess identity,<br><em>wherever you play.</em></h1>
+          <p>Keep your username, ratings, puzzle progress, games, friends, settings and profile together in one secure Advanced Chess account.</p>
+          <div class="trust-row"><span>✓ Unique usernames</span><span>✓ Guest mode</span><span>✓ Google sign-in</span></div>
+        </div>
+
+        <div class="auth-card">
+          <div class="auth-tabs">
+            <button data-auth-tab="login" class="active">Sign in</button>
+            <button data-auth-tab="signup">Create account</button>
+          </div>
+
+          <div id="loginPane" class="auth-pane active">
+            <h2>Welcome back</h2>
+            <p class="muted">Sign in to continue to Advanced Chess.</p>
+
+            <button class="google-btn" id="googleLogin">
+              <span class="google-g">G</span> Continue with Google
+            </button>
+
+            <div class="or"><span>or use email</span></div>
+
+            <form id="loginForm" novalidate>
+              <label>
+                Email
+                <input id="loginEmail" type="email" autocomplete="email" required>
+              </label>
+
+              <label>
+                Password
+                <div class="password-field">
+                  <input id="loginPassword" type="password" autocomplete="current-password" required>
+                  <button type="button" data-toggle-password="loginPassword">Show</button>
+                </div>
+              </label>
+
+              <div class="form-row">
+                <a href="#forgot-password" class="text-link">Forgot password?</a>
+                <span id="loginError" class="form-error"></span>
+              </div>
+
+              <button class="primary-btn full" type="submit">Sign in</button>
+            </form>
+
+            <button class="guest-link" id="guestLogin">Continue as Guest</button>
+          </div>
+
+          <div id="signupPane" class="auth-pane">
+            <h2>Create your player account</h2>
+            <p class="muted">Choose the name other players will see.</p>
+
+            <button class="google-btn" id="googleSignup">
+              <span class="google-g">G</span> Continue with Google
+            </button>
+
+            <div class="or"><span>or create with email</span></div>
+
+            <form id="signupForm" novalidate>
+              <label>
+                Username
+                <div class="validated-input">
+                  <input id="signupUsername" maxlength="20" autocomplete="username" required>
+                  <span id="usernameCheck" aria-live="polite"></span>
+                </div>
+                <small>3–20 letters, numbers, _ or -. It must be unique.</small>
+              </label>
+
+              <label>
+                Email
+                <input id="signupEmail" type="email" autocomplete="email" required>
+              </label>
+
+              <label>
+                Password
+                <div class="password-field">
+                  <input id="signupPassword" type="password" autocomplete="new-password" required>
+                  <button type="button" data-toggle-password="signupPassword">Show</button>
+                </div>
+                <small>At least 8 characters. Any characters are allowed.</small>
+              </label>
+
+              <label>
+                Confirm password
+                <input id="signupPassword2" type="password" autocomplete="new-password" required>
+              </label>
+
+              <span id="signupError" class="form-error"></span>
+
+              <button class="primary-btn full" type="submit">Create account</button>
+            </form>
+
+            <p class="legal">
+              By continuing you agree to the site's Terms and Privacy Policy.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="guest-view" id="guestView" hidden>
+        <div class="guest-shell">
+          <div id="guestContent"></div>
+        </div>
+      </section>
+
+      <section class="account-view" id="accountView" hidden>
+        <aside class="sidebar">
+          <div class="side-profile" id="sideProfile"></div>
+
+          <nav class="side-nav" aria-label="Account navigation">
+            <a href="#profile" data-route="profile">Overview</a>
+            <a href="#games" data-route="games">Game history</a>
+            <a href="#friends" data-route="friends">Friends & challenges</a>
+            <a href="#stats" data-route="stats">Statistics</a>
+            <a href="#leaderboard" data-route="leaderboard">Leaderboards</a>
+            <a href="#tournaments" data-route="tournaments">Tournaments</a>
+            <a href="#settings" data-route="settings">Settings</a>
+            <a href="#security" data-route="security">Security</a>
+          </nav>
+
+          <button class="side-signout" id="sideSignout">Sign out</button>
+        </aside>
+
+        <section class="content" id="content"></section>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="modal" id="modal" hidden></div>
+  </div>
+
+  <script type="module" src="./account.js?v=20260930-2"></script>
+</body>
+</html>
