@@ -70,6 +70,9 @@ img { max-width: 100%; }
 .brand small { display: block; margin-top: 2px; color: var(--subtle); font-size: 9px; letter-spacing: 2px; }
 .top-actions { display: flex; align-items: center; gap: 9px; }
 .top-link { color: var(--muted); padding: 9px 10px; font-size: 13px; }
+.embedded-account .top-link {
+    display: none !important;
+}
 .top-link:hover { color: var(--text); }
 .icon-btn, .user-menu {
   position: relative;
