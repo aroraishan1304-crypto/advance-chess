@@ -5231,15 +5231,20 @@ function renderPlayerProfile(
   });
 }
 
-function googleStart(
-  mode = "login"
-) {
-  location.href =
+function googleStart(mode = "login") {
+  const url =
     `/api/account/google/start${
       mode === "link"
         ? "?mode=link"
         : ""
     }`;
+
+  if (window.self !== window.top) {
+    window.top.location.href = url;
+    return;
+  }
+
+  location.href = url;
 }
 
 function validateUsernameClient(
