@@ -323,6 +323,47 @@ const css = `
         width:205px;
     }
 }
+#acAccountDialog {
+    position: relative;
+    width: min(900px, calc(100vw - 32px));
+    height: min(850px, calc(100vh - 32px));
+    max-width: 900px;
+    max-height: 850px;
+    padding: 0;
+    border: 0;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #11161d;
+    box-shadow: 0 30px 100px rgba(0, 0, 0, 0.55);
+}
+
+#acAccountDialog::backdrop {
+    background: rgba(0, 0, 0, 0.68);
+    backdrop-filter: blur(9px);
+}
+
+#acAccountFrame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+}
+
+#acAccountClose {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
 `;
 
 function ensureStyles() {
@@ -521,3 +562,41 @@ if (document.readyState === "loading") {
 } else {
     boot();
 }
+
+window.addEventListener("ac-account-open", (event) => {
+    let dialog = document.getElementById("acAccountDialog");
+
+    if (!dialog) {
+        dialog = document.createElement("dialog");
+        dialog.id = "acAccountDialog";
+        dialog.innerHTML = `
+            <button type="button" id="acAccountClose" aria-label="Close account panel">×</button>
+            <iframe
+                id="acAccountFrame"
+                title="Account"
+                src="/account/index.html"
+            ></iframe>
+        `;
+
+        document.body.append(dialog);
+
+        document.getElementById("acAccountClose").addEventListener("click", () => {
+            dialog.close();
+        });
+
+        dialog.addEventListener("click", (event) => {
+         if (event.target === dialog) {
+         dialog.close();
+         }
+        });
+    }
+
+    const section = event.detail?.section || "";
+    const frame = document.getElementById("acAccountFrame");
+
+    frame.src = section
+        ? `/account/index.html#${encodeURIComponent(section)}`
+        : "/account/index.html";
+
+    dialog.showModal();
+});
