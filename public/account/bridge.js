@@ -353,10 +353,6 @@ async function getMe() {
     return data;
 }
 
-function accountHref(hash) {
-    return `/account/index.html${hash || ""}`;
-}
-
 function makeButton(label, kind, avatar) {
     const root = document.createElement("div");
     root.className = "ac-account-root";
@@ -422,11 +418,26 @@ function makeButton(label, kind, avatar) {
     menu.append(head);
 
     const addLink = (textValue, hash) => {
-        const link = document.createElement("a");
-        link.href = accountHref(hash);
-        link.textContent = textValue;
-        link.setAttribute("role", "menuitem");
-        menu.append(link);
+     const button = document.createElement("button");
+     button.type = "button";
+     button.textContent = textValue;
+     button.setAttribute("role", "menuitem");
+
+     button.addEventListener("click", event => {
+        event.stopPropagation();
+        menu.hidden = true;
+        button.setAttribute("aria-expanded", "false");
+
+        window.dispatchEvent(
+            new CustomEvent("ac-account-open", {
+                detail: {
+                    section: String(hash || "").replace(/^#/, "")
+                }
+            })
+        );
+     });
+
+     menu.append(button);
     };
 
     addLink("Profile", "#profile");
