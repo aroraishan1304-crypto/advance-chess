@@ -73,6 +73,9 @@ img { max-width: 100%; }
 .embedded-account .top-link {
     display: none !important;
 }
+.embedded-account a[href="/chess.html"] {
+    display: none !important;
+}
 .top-link:hover { color: var(--text); }
 .icon-btn, .user-menu {
   position: relative;
