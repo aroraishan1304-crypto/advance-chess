@@ -6265,7 +6265,8 @@ async function boot() {
     await refreshData();
     renderRoute();
   } catch {
-    showAuth();
+    setView("auth");
+    setAuthMode("login");
   }
 
   state.booted = true;
