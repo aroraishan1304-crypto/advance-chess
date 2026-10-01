@@ -986,13 +986,15 @@ function renderProfile() {
 
   const root = $("#content");
 
-  const actions = [
-    h("a", {
-      class: "secondary-btn",
-      href: "/chess.html",
-      text: "Play chess",
-    }),
-  ];
+  const actions = window.self === window.top
+    ? [
+      h("a", {
+        class: "secondary-btn",
+        href: "/chess.html",
+        text: "Play chess",
+      }),
+     ]
+    : [];
 
   root.append(
     pageHead(
